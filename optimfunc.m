@@ -91,16 +91,21 @@ end
 [plsf]      = PLSFindex(Pd,Ybus,V);
 [Ifault_OPT]= faultAnalysis(Ybus,abs(V));
 
-Loss_OPT = abs(PL);
+% Robust scalarization
+Loss_OPT = sum(abs(PL(:)));
 if isnan(Loss_OPT) || Loss_OPT == 0
     Loss_OPT = Initial_Loss;
 end
 
-VD_optim  = sqrt(sum((1 - abs(V)).^2));
-EENS_OPT  = EENS;
-VSI_OPT   = VSI;
+VD_optim   = sqrt(sum((1 - abs(V)).^2));
+EENS_OPT   = sum(abs(EENS(:)));
+VSI_OPT    = sum(abs(VSI(:)));
+plsf_curr  = sum(abs(plsf(:)));
+plsf_init  = sum(abs(Initial_plsf(:)));
+if plsf_curr <= eps, plsf_curr = eps; end
+if plsf_init <= eps, plsf_init = eps; end
 
-% -------------------- ????? ????? (??? ???) --------------------
+% -------------------- Generation Cost --------------------
 ctr1 = 0;
 cost_OPT = [];
 for i5 = 1:r2
@@ -110,22 +115,31 @@ for i5 = 1:r2
     end
 end
 
-% -------------------- ????? ESS (?????? BSS) --------------------
+% -------------------- ESS cost components --------------------
 ESS_cost_total = sum(essOpC) + sum(penSOC);
 
 Total_cost_OPT = sum(cost_OPT) + ESS_cost_total;
 
-% -------------------- ???? ??? (??? ???) ------------------------
+% -------------------- Objective (scalar-safe) ------------------------
 if flagconverg == 1
     ObjF = inf;
 else
-    F1 = abs(Total_cost_OPT / Total_initiacost);
-    F2 = abs(Loss_OPT        / Initial_Loss);
-    F3 = abs(VD_optim        / Initial_VD);
-    F4 = abs(EENS_OPT        / Initial_EENS);
-    F5 = abs(VSI_OPT         / Initial_VSI);
-    F6 = abs(Initial_plsf    / plsf);
-    F7 = abs(sum(1 - abs(Ifault_OPT ./ Ifault_initial)));
+    denom_cost  = max(Total_initiacost, eps);
+    denom_loss  = max(Initial_Loss, eps);
+    denom_vd    = max(Initial_VD, eps);
+    denom_eens  = max(Initial_EENS, eps);
+    denom_vsi   = max(Initial_VSI, eps);
+
+    F1 = abs(Total_cost_OPT / denom_cost);
+    F2 = abs(Loss_OPT        / denom_loss);
+    F3 = abs(VD_optim        / denom_vd);
+    F4 = abs(EENS_OPT        / denom_eens);
+    F5 = abs(VSI_OPT         / denom_vsi);
+    F6 = abs(plsf_init       / plsf_curr);
+
+    denomIf = max(abs(Ifault_initial), 1e-9);
+    ratioIf = Ifault_OPT ./ denomIf;
+    F7 = abs(sum(1 - abs(ratioIf(:))));
 
     ObjF = F1 + F2 + F3 + F4 + F5 + F6 + F7;
 end
